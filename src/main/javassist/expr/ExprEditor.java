@@ -230,6 +230,10 @@ public class ExprEditor {
                         }
                     }
                 }
+                else if (c == Opcode.INVOKEDYNAMIC) {
+                    InvokeDynamicCall invokeDynamicCall = new InvokeDynamicCall(pos, iterator, clazz, minfo);
+                    edit(invokeDynamicCall);
+                }
             }
             else {  // c >= 188
                 if (c == Opcode.NEWARRAY || c == Opcode.ANEWARRAY
@@ -258,7 +262,11 @@ public class ExprEditor {
         }
     }
 
-    /**
+  public void edit(InvokeDynamicCall invokeDynamicCall) throws CannotCompileException{
+
+  }
+
+  /**
      * Edits a <code>new</code> expression (overridable).
      * The default implementation performs nothing.
      *

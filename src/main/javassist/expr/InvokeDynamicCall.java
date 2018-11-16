@@ -179,7 +179,7 @@ public class InvokeDynamicCall extends Expr {
 
 
 
-    private static final Map<Integer, ConstPoolRef> constPoolValueToEnum = new HashMap<>();
+    private static final Map<Integer, ConstPoolRef> constPoolValueToEnum = new HashMap<Integer, ConstPoolRef>();
 
     static {
       constPoolValueToEnum.put(ConstPool.REF_getField, GETFIELD);

@@ -231,8 +231,9 @@ public class ExprEditor {
                     }
                 }
                 else if (c == Opcode.INVOKEDYNAMIC) {
-                    InvokeDynamicCall invokeDynamicCall = new InvokeDynamicCall(pos, iterator, clazz, minfo);
-                    edit(invokeDynamicCall);
+                    InvokeDynamicCall indyCall = new InvokeDynamicCall(pos, iterator, clazz, minfo);
+                    expr = indyCall;
+                    edit(indyCall);
                 }
             }
             else {  // c >= 188
@@ -262,7 +263,7 @@ public class ExprEditor {
         }
     }
 
-  public void edit(InvokeDynamicCall invokeDynamicCall) throws CannotCompileException{
+  public void edit(InvokeDynamicCall indyCall) throws CannotCompileException{
 
   }
 

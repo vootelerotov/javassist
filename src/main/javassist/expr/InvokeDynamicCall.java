@@ -41,7 +41,7 @@ public class InvokeDynamicCall extends Expr {
     return cp.getUtf8Info(nameIndex);
   }
 
-  public String getBsmName() {
+  public String getBootstrapMethodName() {
     ConstPool cp = thisClass.getClassFile().getConstPool();
     BootstrapMethodsAttribute.BootstrapMethod bsm = getBootstrapMethod();
     int mhRefIndex = cp.getMethodHandleIndex(bsm.methodRef);
@@ -53,26 +53,21 @@ public class InvokeDynamicCall extends Expr {
     return cp.getMethodrefName(mhRefIndex);
   }
 
-  public String getBsmSignature() {
+  public String getBootstrapMethodSignature() {
     ConstPool cp = thisClass.getClassFile().getConstPool();
     BootstrapMethodsAttribute.BootstrapMethod bsm = getBootstrapMethod();
     int mhRefIndex = cp.getMethodHandleIndex(bsm.methodRef);
     return cp.getMethodrefType(mhRefIndex);
   }
 
-  public String getBsmClass() {
+  public String getBootstrapMethodClass() {
     ConstPool cp = thisClass.getClassFile().getConstPool();
     BootstrapMethodsAttribute.BootstrapMethod bsm = getBootstrapMethod();
     int mhRefIndex = cp.getMethodHandleIndex(bsm.methodRef);
     return cp.getMethodrefClassName(mhRefIndex);
   }
 
-  @Deprecated
-  public ConstMethodHandle getMethodInfo() {
-    return parseMethodHandleConst(thisClass.getClassFile().getConstPool(), getBootstrapMethod().methodRef);
-  }
-
-  public int argumentCount() {
+  public int getBootstrapMethodArgCount() {
     return getBootstrapMethod().arguments.length;
   }
 
@@ -84,7 +79,7 @@ public class InvokeDynamicCall extends Expr {
    * Constant pool entries for primitives are returned as their boxed types.
    * Constant_ClassInfo, Constant_MethodHandle and Constant_MethodType use separate types.
    */
-  public Object[] getBsmArguments() {
+  public Object[] getBootstrapMethodArguments() {
     int[] argConstPoolIndexes = getBootstrapMethod().arguments;
     Object[] args = new Object[argConstPoolIndexes.length];
     ConstPool constPool = thisClass.getClassFile().getConstPool();
@@ -111,7 +106,7 @@ public class InvokeDynamicCall extends Expr {
         args[i] = constPool.getDoubleInfo(argIndex);
         break;
       case ConstPool.CONST_MethodHandle:
-        args[i] = parseMethodHandleConst(constPool, argIndex);
+        args[i] = parseMethodHandleReference(constPool, argIndex);
         break;
       case ConstPool.CONST_MethodType:
         args[i] = new ConstMethodType(constPool.getUtf8Info(constPool.getMethodTypeInfo(argIndex)));
@@ -132,36 +127,33 @@ public class InvokeDynamicCall extends Expr {
     return tableEntry.getMethods()[bootMethodTableIndex];
   }
 
-  private ConstMethodHandle parseMethodHandleConst(ConstPool constPool, int argIndex) {
+  private MethodHandleReference parseMethodHandleReference(ConstPool constPool, int argIndex) {
     int methodHandleKind = constPool.getMethodHandleKind(argIndex);
     int methodHandleRefIndex = constPool.getMethodHandleIndex(argIndex);
 
+    MethodHandleRefKind refKind = MethodHandleRefKind.fromConstantPoolValue(methodHandleKind);
+    String className, name, type;
+
     if (methodHandleKind >= ConstPool.REF_getField && methodHandleKind <= ConstPool.REF_putStatic) {
-      return new FieldConst(
-          MethodHandleRefKind.fromConstantPoolValue(methodHandleKind),
-          constPool.getFieldrefClassName(methodHandleRefIndex),
-          constPool.getFieldrefName(methodHandleRefIndex),
-          constPool.getFieldrefType(methodHandleRefIndex)
-      );
+      className = constPool.getFieldrefClassName(methodHandleRefIndex);
+      name = constPool.getFieldrefName(methodHandleRefIndex);
+      type = constPool.getFieldrefType(methodHandleRefIndex);
     }
     else if (methodHandleKind >= ConstPool.REF_invokeVirtual && methodHandleKind <= ConstPool.REF_newInvokeSpecial) {
-      return new MethodConst(
-          MethodHandleRefKind.fromConstantPoolValue(methodHandleKind),
-          constPool.getMethodrefClassName(methodHandleRefIndex),
-          constPool.getMethodrefName(methodHandleRefIndex),
-          constPool.getMethodrefType(methodHandleRefIndex)
-      );
+      className = constPool.getMethodrefClassName(methodHandleRefIndex);
+      name = constPool.getMethodrefName(methodHandleRefIndex);
+      type = constPool.getMethodrefType(methodHandleRefIndex);
     }
     else if (methodHandleKind == ConstPool.REF_invokeInterface) {
-      return new MethodConst(
-          MethodHandleRefKind.fromConstantPoolValue(methodHandleKind),
-          constPool.getInterfaceMethodrefClassName(methodHandleRefIndex),
-          constPool.getInterfaceMethodrefName(methodHandleRefIndex),
-          constPool.getInterfaceMethodrefType(methodHandleRefIndex)
-      );
+      className = constPool.getInterfaceMethodrefClassName(methodHandleRefIndex);
+      name = constPool.getInterfaceMethodrefName(methodHandleRefIndex);
+      type = constPool.getInterfaceMethodrefType(methodHandleRefIndex);
+    }
+    else {
+      throw new IllegalStateException("Unknown CONSTANT_InvokeDynamic ReferenceKind " + methodHandleKind);
     }
 
-    throw new IllegalStateException("Unknown CONSTANT_InvokeDynamic ReferenceKind " + methodHandleKind);
+    return new MethodHandleReference(refKind, className, name, type);
   }
 
   public void replace(String statement) throws CannotCompileException {
@@ -240,19 +232,6 @@ public class InvokeDynamicCall extends Expr {
     }
   }
 
-  public static class ConstMethodHandle extends Constant {
-
-    public final MethodHandleRefKind refKind;
-
-    private ConstMethodHandle(MethodHandleRefKind refKind) {
-      this.refKind = refKind;
-    }
-
-    public MethodHandleRefKind getMethodHandleRefKind() {
-      return refKind;
-    }
-  }
-
   public enum MethodHandleRefKind {
     GETFIELD,
     GETSTATIC,
@@ -283,35 +262,51 @@ public class InvokeDynamicCall extends Expr {
     }
   }
 
-  // TODO: Both are just containers for (className, name, signature)
-  // TODO: Removing the separation can make the code far easier to read and write
-  public static class FieldConst extends ConstMethodHandle {
-    public final String fieldClassName;
-    public final String fieldName;
-    public final String fieldDescriptor;
+  public static class MethodHandleReference extends Constant {
 
-    public FieldConst(MethodHandleRefKind methodHandleRefKind, String fieldClassName, String fieldName, String fieldDescriptor) {
-      super(methodHandleRefKind);
-      this.fieldClassName = fieldClassName;
-      this.fieldName = fieldName;
-      this.fieldDescriptor = fieldDescriptor;
-    }
-  }
+    private final MethodHandleRefKind refKind;
+    private final String className;
+    private final String name;
+    private final String descriptor;
 
-  public static class MethodConst extends ConstMethodHandle {
-    public final String className;
-    public final String methodName;
-    public final String signature;
-
-    public MethodConst(MethodHandleRefKind methodHandleRefKind, String className, String methodName, String signature) {
-      super(methodHandleRefKind);
+    public MethodHandleReference(MethodHandleRefKind refKind, String className, String name, String descriptor) {
+      this.refKind = refKind;
       this.className = className;
-      this.methodName = methodName;
-      this.signature = signature;
+      this.name = name;
+      this.descriptor = descriptor;
+    }
+
+    public MethodHandleRefKind getReferenceKind() {
+      return refKind;
+    }
+
+    public String getClassName() {
+      return className;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public String getDescriptor() {
+      return descriptor;
+    }
+
+    public boolean isFieldRef() {
+      return refKind.ordinal() >= ConstPool.REF_getField && refKind.ordinal() <= ConstPool.REF_putStatic;
+    }
+
+    public boolean isMethodRef() {
+      return refKind.ordinal() >= ConstPool.REF_invokeVirtual && refKind.ordinal() <= ConstPool.REF_newInvokeSpecial;
+    }
+
+    public boolean isInterfaceMethodRef() {
+      return refKind == MethodHandleRefKind.INVOKEINTERFACE;
     }
   }
 
   public static class ConstMethodType extends Constant {
+
     public final String methodSignature;
 
     public ConstMethodType(String methodSignature) {
